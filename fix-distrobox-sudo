@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# 1. Safety check: Ensure we are on the host
+if ! command -v podman &> /dev/null; then
+    echo "❌ Error: 'podman' is not installed or not in PATH."
+    echo "It looks like you are running this inside the container!"
+    echo "Please type 'exit' to return to your Fedora host, then run the script again."
+    exit 1
+fi
+
+CONTAINER="$1"
+
+# 2. Interactive Selection
+if [ -z "$CONTAINER" ]; then
+    echo "🔍 Searching for Distrobox containers..."
+    
+    # Fetch only containers created by Distrobox
+    mapfile -t CONTAINER_LIST < <(podman ps -a --filter label=manager=distrobox --format "{{.Names}}")
+    
+    if [ ${#CONTAINER_LIST[@]} -eq 0 ]; then
+        echo "❌ No Distrobox containers found on this system."
+        exit 1
+    fi
+    
+    # If fzf is installed, use it for a slick arrow-key menu
+    if command -v fzf &> /dev/null; then
+        CONTAINER=$(printf "%s\n" "${CONTAINER_LIST[@]}" | fzf --prompt="Select container to fix: " --height=~10 --layout=reverse --border)
+        if [ -z "$CONTAINER" ]; then
+            echo "Canceled."
+            exit 0
+        fi
+    else
+        # Otherwise, use a clean and easy-to-read numbered list
+        echo ""
+        echo "Available Distrobox containers:"
+        for i in "${!CONTAINER_LIST[@]}"; do
+            echo "  $((i + 1))) ${CONTAINER_LIST[$i]}"
+        done
+        echo ""
+        
+        while true; do
+            read -p "Enter the number of the container (or 'q' to quit): " choice
+            if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+                echo "Canceled."
+                exit 0
+            fi
+            
+            # Validate input is a number within range
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#CONTAINER_LIST[@]}" ]; then
+                CONTAINER="${CONTAINER_LIST[$((choice - 1))]}"
+                break
+            else
+                echo "⚠️  Invalid selection. Please enter a valid number."
+            fi
+        done
+    fi
+fi
+
+echo ""
+echo "🚀 Ensuring container '$CONTAINER' is awake..."
+distrobox start "$CONTAINER" > /dev/null 2>&1
+
+echo "🔧 Injecting root shell into '$CONTAINER' to fix sudo permissions..."
+
+# 3. Apply the fixes
+podman exec --user 0 "$CONTAINER" sh -c '
+    if [ -f /usr/bin/sudo ]; then
+        echo " -> Fixing /usr/bin/sudo"
+        chown root:root /usr/bin/sudo
+        chmod 4755 /usr/bin/sudo
+    fi
+
+    if [ -f /usr/bin/su ]; then
+        echo " -> Fixing /usr/bin/su"
+        chown root:root /usr/bin/su
+        chmod 4755 /usr/bin/su
+    fi
+
+    if [ -f /etc/sudo.conf ]; then
+        echo " -> Fixing /etc/sudo.conf"
+        chown root:root /etc/sudo.conf
+    fi
+
+    if [ -f /etc/sudoers ]; then
+        echo " -> Fixing /etc/sudoers"
+        chown root:root /etc/sudoers
+        chmod 440 /etc/sudoers
+    fi
+
+    if [ -d /etc/sudoers.d ]; then
+        echo " -> Fixing /etc/sudoers.d/ directory"
+        chown -R root:root /etc/sudoers.d/
+    fi
+'
+
+if [ $? -eq 0 ]; then
+    echo "✅ Success! Permissions restored."
+    echo "You can now log in by typing: distrobox enter $CONTAINER"
+else
+    echo "❌ Failed. Could not execute commands inside the container."
+fi
