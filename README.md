@@ -4,13 +4,6 @@ A bash script to automatically restore broken `sudo` privileges inside Distrobox
 
 If you accidentally alter permissions or get locked out of `sudo` with errors like `sudo: /usr/bin/sudo must be owned by uid 0`, this script runs from your host machine to safely bypass the container's broken environment and reset the necessary system file permissions using Podman.
 
-## Features
-
-* **Interactive Menu:** Automatically lists available Distrobox containers and lets you choose which one to fix.
-* **Auto-Start:** Automatically wakes up stopped containers before applying fixes.
-* **Host Guard:** Detects if you accidentally run the script inside a container and stops execution.
-* **Fuzzy Finding:** Integrates with `fzf` for a modern selection menu (if installed on the host), falling back to a standard numbered list otherwise.
-
 ## Prerequisites
 
 * `podman`
