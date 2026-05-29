@@ -67,3 +67,7 @@ The script forces a root shell into the target container and resets the ownershi
 * `/etc/sudo.conf`
 * `/etc/sudoers`
 * `/etc/sudoers.d/`
+
+## Disclosure
+
+This script was made with some help from AI. I'll likely be doing some manual refactoring soon to clean things up.
